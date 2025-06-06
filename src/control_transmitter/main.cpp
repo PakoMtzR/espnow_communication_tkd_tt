@@ -18,17 +18,13 @@ bool holdingRedTrigger = false;
 volatile unsigned long lastInterruptTime[] = {0, 0, 0, 0, 0, 0};
 const unsigned long debounceDelay = 200; // ms
 
+// Variable para accion del control
 uint8_t data = CONTROL_STATE::NO_ACTION;
 
-// typedef struct {
-//     uint8_t controllerID;
-//     uint8_t data;
-// } struct_message;
-
-// struct_message myData;
-
+// Estructura de datos para enviar por ESPNOW
 DeviceMessage message;
 
+// Rutina cuando se envia un mensaje por espnow
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
     char macStr[18];
     snprintf(macStr, sizeof(macStr), "%02X:%02X:%02X:%02X:%02X:%02X", mac_addr[0], mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4], mac_addr[5]);
@@ -39,7 +35,21 @@ void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
     Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Exitosa" : "Fallida");
 }
 
-void RegisterPeeks() {
+// Funcion para inicializar y configuracion de ESPNOW
+void espnow_init() {
+    WiFi.mode(WIFI_STA);
+    Serial.print("MAC Transmisor: ");
+    Serial.println(WiFi.macAddress());
+
+    if (esp_now_init() != ESP_OK) {
+        Serial.println("Error inicializando ESP-NOW");
+        while(1) delay(100);
+    }
+
+    // Registramos el callback
+    esp_now_register_send_cb(OnDataSent);
+
+    // Emparejamos dispositivo receptor
     esp_now_peer_info_t peerInfo;
     memcpy(peerInfo.peer_addr, MAC_RECEIVER, 6);
     peerInfo.channel = 0;
@@ -52,23 +62,9 @@ void RegisterPeeks() {
     }
 }
 
-void espnow_init() {
-    WiFi.mode(WIFI_STA);
-    Serial.print("MAC Transmisor: ");
-    Serial.println(WiFi.macAddress());
-
-    if (esp_now_init() != ESP_OK) {
-        Serial.println("Error inicializando ESP-NOW");
-        while(1) delay(100);
-    }
-
-    esp_now_register_send_cb(OnDataSent);
-    RegisterPeeks();
-}
-
+// Funcion para el envio de datos por ESPNOW
 void espnow_sendMessage() {
     esp_err_t result = esp_now_send(MAC_RECEIVER, (uint8_t *) &message, sizeof(message));
-    
     if (result != ESP_OK) {
       Serial.println("Error al enviar");
     }
@@ -94,11 +90,11 @@ void IRAM_ATTR buttonInterrupt5() { handleButtonInterrupt(5); }
 
 void setup() {
     message.base.deviceType = CONTROL_TRANSMITTER;
-    message.base.deviceID = 1;
+    message.base.deviceID = 2;
 
     Serial.begin(115200);
     Serial.println("Inicializando Control...");
-    // myData.controllerID = 2;
+
     for(uint8_t i = 0; i < numButtons; i++) {
         pinMode(buttonPins[i], INPUT);
     }
@@ -171,10 +167,8 @@ void loop() {
     // Envio de datos
     if (data != CONTROL_STATE::NO_ACTION) {
         message.payload.control_transmitter.data = data;
-        // myData.data = data;
         espnow_sendMessage();
-        Serial.print("Data: ");
-        Serial.println(data);
+        Serial.printf("Data: %d\n", data);
         data = CONTROL_STATE::NO_ACTION;
     }
     delay(10);

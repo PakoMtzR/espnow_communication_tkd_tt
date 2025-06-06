@@ -17,6 +17,7 @@ struct DeviceBase
 
 union DevicePayload {
     struct { uint8_t data; } control_transmitter;  
+    struct { float pressure_value; } trunk_protector;
 };
 
 struct DeviceMessage {
