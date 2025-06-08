@@ -1,14 +1,9 @@
 #include <esp_now.h>
 #include <WiFi.h>
-#include "DeviceData.h"
-#include "const.h"
 
-// Definir los pines donde está conectado el DIP switch
-#define DIP_SWITCH_PIN_1 12
-#define DIP_SWITCH_PIN_2 14
-#define DIP_SWITCH_PIN_3 27
-#define DIP_SWITCH_PIN_4 26
-// Añade más pines si tu DIP switch tiene más posiciones
+#include "DataStructure.h"
+#include "const.h"
+#include "dip_switch.h"
 
 // Variable que almacenará el valor del DIP switch
 uint8_t dipValue = 0;
@@ -22,20 +17,20 @@ const unsigned long MAX_WAIT_TIME = 2000; // 2000ms para recibir la coincidencia
 const bool DEBUG_MODE = true;
 uint8_t RECEIVING_DEVICE_MODE = ONE_CONTROL;
 
+void espnow_init();
+
 // Callback cuando llega un mensaje
 void OnDataReceived(const uint8_t *mac, const uint8_t *incomingData, int len) {
     DeviceMessage receivedMessage;
     memcpy(&receivedMessage, incomingData, sizeof(receivedMessage));
 
-    switch (RECEIVING_DEVICE_MODE)
-    {
+    switch (RECEIVING_DEVICE_MODE) {
         case ONE_CONTROL:
             if (receivedMessage.base.deviceType == CONTROL_TRANSMITTER) {
                 if (DEBUG_MODE) {
-                    Serial.print("¡Recibido! Dato: ");
-                    Serial.println(receivedMessage.payload.control_transmitter.data);
+                    Serial.printf("¡Recibido!, (Control %d) - Dato: %d\n", receivedMessage.base.deviceID, receivedMessage.payload.control_transmitter.data);
                 }
-                else Serial.println(receivedMessage.payload.control_transmitter.data);
+                else Serial.printf("%d", receivedMessage.payload.control_transmitter.data);
             }
             break;
 
@@ -89,30 +84,19 @@ void OnDataReceived(const uint8_t *mac, const uint8_t *incomingData, int len) {
     }
 }
 
-
 void setup() {
     Serial.begin(115200);
-    Serial.println("Inicializando Receptor...");
+    Serial.println("\nInicializando Receptor...");
     Serial.print("MAC Receptor: ");
     Serial.println(WiFi.macAddress());
-
-    // Configurar los pines del DIP switch como entradas con pull-up
-    pinMode(DIP_SWITCH_PIN_1, INPUT_PULLUP);
-    pinMode(DIP_SWITCH_PIN_2, INPUT_PULLUP);
-    pinMode(DIP_SWITCH_PIN_3, INPUT_PULLUP);
-    pinMode(DIP_SWITCH_PIN_4, INPUT_PULLUP);
     
-    // Leer cada switch y asignar el valor correspondiente al bit
-    if(digitalRead(DIP_SWITCH_PIN_1) == LOW) dipValue |= 0b0000;
-    if(digitalRead(DIP_SWITCH_PIN_2) == LOW) dipValue |= 0b0001;
-    if(digitalRead(DIP_SWITCH_PIN_3) == LOW) dipValue |= 0b0011;
-    if(digitalRead(DIP_SWITCH_PIN_4) == LOW) dipValue |= 0b0100;
+    dipswitch_config();
+    dipValue = read_dipswitch();
 
-    Serial.print("Valor leído del DIP switch: ");
-    Serial.println(dipValue);
+    Serial.printf("Valor leído del DIP switch: %08b\n", dipValue);
 
-    switch (dipValue)
-    {
+    // Configurar el modo de operacion basado en DIP switch
+    switch (dipValue) {
         case 0b0001:
             RECEIVING_DEVICE_MODE = ONE_CONTROL;
             break;
@@ -123,15 +107,14 @@ void setup() {
             RECEIVING_DEVICE_MODE = JUST_TRUNK_PROTECTOR;
             break;
         default:
+            RECEIVING_DEVICE_MODE = ONE_CONTROL;  // Modo por defecto
+            if (DEBUG_MODE) {
+                Serial.println("Configuración DIP no reconocida. Usando modo por defecto.");
+            }
             break;
     }
 
-    WiFi.mode(WIFI_STA);
-    if (esp_now_init() != ESP_OK) {
-        Serial.println("Error al iniciar ESP-NOW");
-        return;
-    }
-    esp_now_register_recv_cb(OnDataReceived);
+    espnow_init();
 }
 
 void loop() {
@@ -150,5 +133,18 @@ void loop() {
         
         default:
             break;
+    }
+}
+
+void espnow_init() {
+    WiFi.mode(WIFI_STA);
+    if (esp_now_init() != ESP_OK) {
+        Serial.println("Error al iniciar ESP-NOW");
+        while (1); // Detener ejecución si hay error
+    }
+    esp_now_register_recv_cb(OnDataReceived);
+    
+    if (DEBUG_MODE) {
+        Serial.println("ESP-NOW inicializado correctamente");
     }
 }

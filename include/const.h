@@ -1,5 +1,22 @@
+// Direccion MAC del receptor
 const uint8_t MAC_RECEIVER[] = { 0x0C, 0xB8, 0x15, 0xD7, 0xE5, 0x38 };
 
+// Asignamos un valor para cada tipo de dispositivo
+enum DeviceType {
+    CONTROL_TRANSMITTER = 1,
+    RECEIVING_DEVICE = 2,
+    TRUNK_PROTECTOR_TRANSMITTER = 3
+};
+
+// Lista para la configuracion del dispositivo receptor
+enum SYSTEM_MODE {
+    ONE_CONTROL = 0,
+    TWO_CONTROL = 1,
+    JUST_TRUNK_PROTECTOR = 2,
+    TRUNK_PROTECTOR_AND_CONTROL = 3
+};
+
+// Lista de los estados posibles de la botonera
 enum CONTROL_STATE {
     NO_ACTION = 0,
     BLUE_PUNCH = 1,
@@ -12,11 +29,4 @@ enum CONTROL_STATE {
     RED_HEAD_KICK = 8,
     RED_BODY_TECHNICAL_KICK = 9,
     RED_HEAD_TECHNICAL_KICK = 10,
-};
-
-enum SYSTEM_MODE {
-    ONE_CONTROL = 0,
-    TWO_CONTROL = 1,
-    JUST_TRUNK_PROTECTOR = 2,
-    TRUNK_PROTECTOR_AND_CONTROL = 3
 };

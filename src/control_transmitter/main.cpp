@@ -1,8 +1,9 @@
 #include <Arduino.h>
 #include <esp_now.h>
 #include <WiFi.h>
+
 #include "const.h"
-#include "DeviceData.h"
+#include "DataStructure.h"
 
 // Pines donde están conectados los botones (configuración pull-down)
 const int buttonPins[] = {27, 17, 14, 13, 16, 4};
@@ -93,7 +94,7 @@ void setup() {
     message.base.deviceID = 2;
 
     Serial.begin(115200);
-    Serial.println("Inicializando Control...");
+    Serial.printf("\nInicializando Control %d...\n", message.base.deviceID);
 
     for(uint8_t i = 0; i < numButtons; i++) {
         pinMode(buttonPins[i], INPUT);
@@ -167,8 +168,8 @@ void loop() {
     // Envio de datos
     if (data != CONTROL_STATE::NO_ACTION) {
         message.payload.control_transmitter.data = data;
-        espnow_sendMessage();
         Serial.printf("Data: %d\n", data);
+        espnow_sendMessage();
         data = CONTROL_STATE::NO_ACTION;
     }
     delay(10);
