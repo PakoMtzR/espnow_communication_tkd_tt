@@ -8,15 +8,24 @@
 // Variable que almacenará el valor del DIP switch
 uint8_t dipValue = 0;
 
-// Variables de estado
+// Variables de estado mensajes de espnow
 DeviceMessage firstReceivedMessage;
-bool waitingForSecondController = false;
 unsigned long firstMessageTime = 0;
 const unsigned long MAX_WAIT_TIME = 2000; // 2000ms para recibir la coincidencia
 
-const bool DEBUG_MODE = true;
+// Variables para RECEIVING_DEVICE_MODE: TWO_CONTROL
+bool waitingForSecondControllerConfirmation = false;
+
+// Variables para RECEIVING_DEVICE_MODE: TRUNK_PROTECTOR_AND_CONTROL
+uint8_t directActions[] = {BLUE_HEAD_KICK, BLUE_HEAD_TECHNICAL_KICK, RED_HEAD_KICK, RED_HEAD_TECHNICAL_KICK};
+bool waitingForControllerConfirmation_blue = false;
+bool waitingForControllerConfirmation_red = false;
+
+// Variables de operacion del receptor
+bool DEBUG_MODE = true;
 uint8_t RECEIVING_DEVICE_MODE = ONE_CONTROL;
 
+// Prototipos de funciones
 void espnow_init();
 
 // Callback cuando llega un mensaje
@@ -28,54 +37,145 @@ void OnDataReceived(const uint8_t *mac, const uint8_t *incomingData, int len) {
         case ONE_CONTROL:
             if (receivedMessage.base.deviceType == CONTROL_TRANSMITTER) {
                 if (DEBUG_MODE) {
-                    Serial.printf("¡Recibido!, (Control %d) - Dato: %d\n", receivedMessage.base.deviceID, receivedMessage.payload.control_transmitter.data);
+                    Serial.printf("¡Recibido!, (Control %u): %u\n", receivedMessage.base.deviceID, receivedMessage.payload.control_transmitter.data);
                 }
-                else Serial.printf("%d", receivedMessage.payload.control_transmitter.data);
+                else Serial.printf("%u\n", receivedMessage.payload.control_transmitter.data);
             }
             break;
 
         case TWO_CONTROL:
             if (receivedMessage.base.deviceType == CONTROL_TRANSMITTER) {
-                if (!waitingForSecondController) {
-                // Primer mensaje recibido: empezar a esperar
-                firstReceivedMessage = receivedMessage;
-                firstMessageTime = millis();
-                waitingForSecondController = true;
-                Serial.print("Primer dato recibido (Control ");
-                Serial.print(receivedMessage.base.deviceID);
-                Serial.print("): ");
-                Serial.println(receivedMessage.payload.control_transmitter.data);
+                if (!waitingForSecondControllerConfirmation) {
+                    // Primer mensaje recibido: empezar a esperar
+                    firstReceivedMessage = receivedMessage;
+                    firstMessageTime = millis();
+                    waitingForSecondControllerConfirmation = true;
+
+                    if (DEBUG_MODE) Serial.printf("¡Recibido! (Control %u): %u, Esperando confirmacion...\n", receivedMessage.base.deviceID, receivedMessage.payload.control_transmitter.data);
                 } 
                 else {
                     // Segundo mensaje recibido: verificar coincidencia
                     if (receivedMessage.payload.control_transmitter.data == firstReceivedMessage.payload.control_transmitter.data && 
                         receivedMessage.base.deviceID != firstReceivedMessage.base.deviceID) {
                         
-                        unsigned long timeDiff = millis() - firstMessageTime;
+                        // Verificamos diferencia de tiempo
+                        unsigned long timeDiff = millis() - firstMessageTime;   
                         if (timeDiff <= MAX_WAIT_TIME) {
                             if (DEBUG_MODE) {
-                                Serial.print("¡Coincidencia! Acción: ");
-                                Serial.print(receivedMessage.payload.control_transmitter.data);
-                                Serial.print(", Tiempo de diferencia: ");
-                                Serial.print(timeDiff);
-                                Serial.println("ms");
+                                Serial.printf("¡Coincidencia! Acción: %u, Tiempo de diferencia: %ums\n", receivedMessage.payload.control_transmitter.data, timeDiff);
                             }
-                            else Serial.println(receivedMessage.payload.control_transmitter.data);
+                            else Serial.printf("%u\n", receivedMessage.payload.control_transmitter.data);
                         }
                     }
+                    // else Serial.printf("Primer dato ignorado por inconsistencia.\n");
+
                     // Reiniciar el estado, independientemente de si hubo coincidencia
-                    waitingForSecondController = false;
+                    waitingForSecondControllerConfirmation = false;
                 }
             }
             break;
         
         case JUST_TRUNK_PROTECTOR:
             if (receivedMessage.base.deviceType == TRUNK_PROTECTOR_TRANSMITTER) {
-                if (DEBUG_MODE) {
-                    Serial.print("Contacto!, Fuerza: ");
-                    Serial.println(receivedMessage.payload.trunk_protector.pressure_value);
+                if (!DEBUG_MODE) {
+                    switch (receivedMessage.payload.trunk_protector.player_color) {
+                        case 0:
+                            Serial.printf("%u\n", RED_PUNCH);
+                            break;
+                        case 1:
+                            Serial.printf("%u\n", BLUE_PUNCH);
+                            break;
+                        default:
+                            break;                    
+                    }   
                 }
-                else Serial.println(receivedMessage.payload.trunk_protector.pressure_value);
+                else Serial.printf("Contacto (Peto %u Color: %u)!, Fuerza: %.2f\n", receivedMessage.base.deviceID, receivedMessage.payload.trunk_protector.player_color, receivedMessage.payload.trunk_protector.pressure_value);
+            }
+            break;
+        
+        case TRUNK_PROTECTOR_OR_CONTROL:
+            if (receivedMessage.base.deviceType == TRUNK_PROTECTOR_TRANSMITTER) {
+                if (!DEBUG_MODE) {
+                    switch (receivedMessage.payload.trunk_protector.player_color) {
+                        case 0:
+                            Serial.printf("%u\n", RED_PUNCH);
+                            break;
+                        case 1:
+                            Serial.printf("%u\n", BLUE_PUNCH);
+                            break;
+                        default:
+                            break;                    
+                    }   
+                }
+                else Serial.printf("Contacto (Peto %u Color: %u)!, Fuerza: %.2f\n", receivedMessage.base.deviceID, receivedMessage.payload.trunk_protector.player_color, receivedMessage.payload.trunk_protector.pressure_value);
+            }
+            if (receivedMessage.base.deviceType == CONTROL_TRANSMITTER) {
+                uint8_t data = receivedMessage.payload.control_transmitter.data;
+                data = (data == BLUE_BODY_KICK || data == BLUE_BODY_TECHNICAL_KICK || data == RED_BODY_KICK || data == RED_BODY_TECHNICAL_KICK) 
+                       ? data - 1 : data;
+                if (DEBUG_MODE) {
+                    Serial.printf("(Control %u) - Complemento de puntos, Accion: %u\n", receivedMessage.base.deviceID, data);
+                }
+                else Serial.printf("%u\n", data);
+            }
+            break;
+
+        case TRUNK_PROTECTOR_WITH_CONTROL_CONFIRMATION:
+            if (receivedMessage.base.deviceType == TRUNK_PROTECTOR_TRANSMITTER) {
+                switch (receivedMessage.payload.trunk_protector.player_color) {
+                    case 0:
+                        // En caso de recibir dato por parte del PETO AZUL
+                        waitingForControllerConfirmation_red = true;
+                        break;
+                    case 1:
+                        // En caso de recibir dato por parte del PETO ROJO
+                        waitingForControllerConfirmation_blue = true;
+                        break;
+                    default:
+                        break;
+                }
+
+                firstMessageTime = millis();
+                if (DEBUG_MODE) Serial.printf("Contacto Detectado!, (Peto %u Color:%u), Esperando confirmacion...", receivedMessage.base.deviceID, receivedMessage.payload.trunk_protector.player_color);
+            }
+
+            if (receivedMessage.base.deviceType == CONTROL_TRANSMITTER) {
+                bool directActionController = false;
+                for (uint8_t i = 0; sizeof(directActions)/sizeof(directActions[0]); i++) {
+                    if (receivedMessage.payload.control_transmitter.data == directActions[i]){
+                        directActionController = true;
+                        break;
+                    }
+                }
+                if (directActionController) {
+                    if (DEBUG_MODE) Serial.printf("[Accion Directa Control %u] Dato: %u", receivedMessage.base.deviceID, receivedMessage.payload.control_transmitter.data);
+                    else Serial.printf("%u\n", receivedMessage.payload.control_transmitter.data);
+                }
+                else {
+                    unsigned long timeDiff = millis() - firstMessageTime;
+                    if (waitingForControllerConfirmation_blue && 
+                        (receivedMessage.payload.control_transmitter.data == BLUE_PUNCH ||
+                        receivedMessage.payload.control_transmitter.data == BLUE_BODY_KICK ||
+                        receivedMessage.payload.control_transmitter.data == BLUE_BODY_TECHNICAL_KICK)) {
+                        if (timeDiff <= MAX_WAIT_TIME) {
+                            if (DEBUG_MODE) {
+                                Serial.printf("¡Confirmacion! Acción: %u, Tiempo de diferencia: %ums\n", receivedMessage.payload.control_transmitter.data, timeDiff);
+                            }
+                            else Serial.printf("%u\n", receivedMessage.payload.control_transmitter.data);
+                        }
+                    }
+                    if (waitingForControllerConfirmation_red && 
+                        (receivedMessage.payload.control_transmitter.data == RED_PUNCH ||
+                        receivedMessage.payload.control_transmitter.data == RED_BODY_KICK ||
+                        receivedMessage.payload.control_transmitter.data == RED_BODY_TECHNICAL_KICK)) {
+                        if (timeDiff <= MAX_WAIT_TIME) {
+                            if (DEBUG_MODE) {
+                                Serial.printf("¡Confirmacion! Acción: %u, Tiempo de diferencia: %ums\n", receivedMessage.payload.control_transmitter.data, timeDiff);
+                            }
+                            else Serial.printf("%u\n", receivedMessage.payload.control_transmitter.data);
+                        }
+                    }
+                }
             }
             break;
         
@@ -93,24 +193,54 @@ void setup() {
     dipswitch_config();
     dipValue = read_dipswitch();
 
-    Serial.printf("Valor leído del DIP switch: %08b\n", dipValue);
+    Serial.printf("Valor leído del DIP switch: 0x%02X\n", dipValue);
 
     // Configurar el modo de operacion basado en DIP switch
     switch (dipValue) {
-        case 0b0001:
+        case 0x00:
             RECEIVING_DEVICE_MODE = ONE_CONTROL;
+            DEBUG_MODE = false;
             break;
-        case 0b0010:
+        case 0x01:
             RECEIVING_DEVICE_MODE = TWO_CONTROL;
+            DEBUG_MODE = false;
             break;
-        case 0b0100:
+        case 0x02:
             RECEIVING_DEVICE_MODE = JUST_TRUNK_PROTECTOR;
+            DEBUG_MODE = false;
+            break;
+        case 0x03:
+            RECEIVING_DEVICE_MODE = TRUNK_PROTECTOR_OR_CONTROL;
+            DEBUG_MODE = false;
+            break;
+        case 0x04:
+            RECEIVING_DEVICE_MODE = TRUNK_PROTECTOR_WITH_CONTROL_CONFIRMATION;
+            DEBUG_MODE = false;
+            break;
+        case 0x08:
+            RECEIVING_DEVICE_MODE = ONE_CONTROL;
+            DEBUG_MODE = true;
+            break;
+        case 0x09:
+            RECEIVING_DEVICE_MODE = TWO_CONTROL;
+            DEBUG_MODE = true;
+            break;
+        case 0x0A:
+            RECEIVING_DEVICE_MODE = JUST_TRUNK_PROTECTOR;
+            DEBUG_MODE = true;
+            break;
+        case 0x0B:
+            RECEIVING_DEVICE_MODE = TRUNK_PROTECTOR_OR_CONTROL;
+            DEBUG_MODE = true;
+            break;
+        case 0x0C:
+            RECEIVING_DEVICE_MODE = TRUNK_PROTECTOR_WITH_CONTROL_CONFIRMATION;
+            DEBUG_MODE = true;
             break;
         default:
             RECEIVING_DEVICE_MODE = ONE_CONTROL;  // Modo por defecto
-            if (DEBUG_MODE) {
-                Serial.println("Configuración DIP no reconocida. Usando modo por defecto.");
-            }
+            DEBUG_MODE = true;
+            Serial.println("Configuración DIP no reconocida. Usando modo por defecto (ONE CONTROL, DEBUG_MODE = true).");
             break;
     }
 
@@ -119,18 +249,29 @@ void setup() {
 
 void loop() {
     switch (RECEIVING_DEVICE_MODE) {
-        case ONE_CONTROL:
-            break;
-
         case TWO_CONTROL:
             // Si pasó el tiempo máximo y no llegó el segundo mensaje, reiniciar
-            if (waitingForSecondController && (millis() - firstMessageTime > MAX_WAIT_TIME)) {
+            if (waitingForSecondControllerConfirmation && (millis() - firstMessageTime > MAX_WAIT_TIME)) {
                 if (DEBUG_MODE) Serial.println("Tiempo agotado. Ignorando primer dato.");
 
-                waitingForSecondController = false;
+                waitingForSecondControllerConfirmation = false;
             }
             break;
         
+        case TRUNK_PROTECTOR_WITH_CONTROL_CONFIRMATION:
+            // Si pasó el tiempo máximo y no llegó el segundo mensaje, reiniciar
+            if (waitingForControllerConfirmation_blue && (millis() - firstMessageTime > MAX_WAIT_TIME)) {
+                if (DEBUG_MODE) Serial.println("Tiempo agotado. Ignorando primer dato.");
+
+                waitingForControllerConfirmation_blue = false;
+            }
+            if (waitingForControllerConfirmation_red && (millis() - firstMessageTime > MAX_WAIT_TIME)) {
+                if (DEBUG_MODE) Serial.println("Tiempo agotado. Ignorando primer dato.");
+
+                waitingForControllerConfirmation_red = false;
+            }
+            break;
+
         default:
             break;
     }

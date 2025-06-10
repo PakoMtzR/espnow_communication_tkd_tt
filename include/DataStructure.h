@@ -15,7 +15,7 @@ struct DeviceBase
 // Datos a enviar dependiendo el tipo de dispositivo
 union DevicePayload {
     struct { uint8_t data; } control_transmitter;  
-    struct { float pressure_value; } trunk_protector;
+    struct { bool player_color; float pressure_value; } trunk_protector;
 };
 
 // Unimos informacion del dispositivo asi como datos de los sensores de este

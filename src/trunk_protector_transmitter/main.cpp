@@ -61,13 +61,14 @@ void espnow_sendMessage() {
 }
 
 void setup() {
+    message.base.deviceID = 3;
+    message.base.deviceType = TRUNK_PROTECTOR_TRANSMITTER;
+    message.payload.trunk_protector.player_color = PLAYER_BLUE;
+
     Serial.begin(115200);
     Serial.println("Inicializado transmisor del peto...");
 
-    message.base.deviceID = 3;
-    message.base.deviceType = TRUNK_PROTECTOR_TRANSMITTER;
-
-    esp_now_init();
+    espnow_init();
 }
 
 void loop() {

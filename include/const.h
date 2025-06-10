@@ -13,7 +13,8 @@ enum SYSTEM_MODE {
     ONE_CONTROL = 0,
     TWO_CONTROL = 1,
     JUST_TRUNK_PROTECTOR = 2,
-    TRUNK_PROTECTOR_AND_CONTROL = 3
+    TRUNK_PROTECTOR_OR_CONTROL = 3,
+    TRUNK_PROTECTOR_WITH_CONTROL_CONFIRMATION = 4
 };
 
 // Lista de los estados posibles de la botonera
@@ -29,4 +30,9 @@ enum CONTROL_STATE {
     RED_HEAD_KICK = 8,
     RED_BODY_TECHNICAL_KICK = 9,
     RED_HEAD_TECHNICAL_KICK = 10,
+};
+
+enum PLAYER_COLOR {
+    PLAYER_BLUE = false,
+    PLAYER_RED = true
 };
