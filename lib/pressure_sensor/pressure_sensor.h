@@ -6,10 +6,10 @@
 
 // Constantes
 constexpr int HISTORY_SIZE = 10;
-constexpr int PRESSURE_THRESHOLD = 150;
 constexpr int DEBOUNCE_TIME = 1000;
 
 // Declaración de variables (definidas en el .cpp)
+extern int PRESSURE_THRESHOLD;
 extern uint8_t pressure_sensor_pin;
 extern uint16_t adc_resolution;
 extern float resistance_ref; 

@@ -2,6 +2,7 @@
 #include "pressure_sensor.h"
 
 // Definición e inicialización de variables globales
+int PRESSURE_THRESHOLD = 150;           // Valor por default
 uint8_t pressure_sensor_pin = 34;
 uint16_t adc_resolution = 4096;
 float resistance_ref = 217.0f; 

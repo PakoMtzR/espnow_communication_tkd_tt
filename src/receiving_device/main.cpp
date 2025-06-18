@@ -5,6 +5,13 @@
 #include "const.h"
 #include "dip_switch.h"
 
+// Variables y constantes de los leds
+const uint8_t pinLedBlue = 23;
+const uint8_t pinLedRed = 22;
+const unsigned long MAX_WAIT_TIME_LED = 1000;
+unsigned long ledBlueTurnOnTime = 0;
+unsigned long ledRedTurnOnTime = 0;
+
 // Variable que almacenará el valor del DIP switch
 uint8_t dipValue = 0;
 
@@ -27,6 +34,8 @@ uint8_t RECEIVING_DEVICE_MODE = ONE_CONTROL;
 
 // Prototipos de funciones
 void espnow_init();
+void turnOnPlayerLed(uint8_t data);
+void turnOffPlayerLed();
 
 // Callback cuando llega un mensaje
 void OnDataReceived(const uint8_t *mac, const uint8_t *incomingData, int len) {
@@ -40,6 +49,8 @@ void OnDataReceived(const uint8_t *mac, const uint8_t *incomingData, int len) {
                     Serial.printf("¡Recibido!, (Control %u): %u\n", receivedMessage.base.deviceID, receivedMessage.payload.control_transmitter.data);
                 }
                 else Serial.printf("%u\n", receivedMessage.payload.control_transmitter.data);
+
+                turnOnPlayerLed(receivedMessage.payload.control_transmitter.data);
             }
             break;
 
@@ -65,6 +76,8 @@ void OnDataReceived(const uint8_t *mac, const uint8_t *incomingData, int len) {
                                 Serial.printf("¡Coincidencia! Acción: %u, Tiempo de diferencia: %ums\n", receivedMessage.payload.control_transmitter.data, timeDiff);
                             }
                             else Serial.printf("%u\n", receivedMessage.payload.control_transmitter.data);
+                            
+                            turnOnPlayerLed(receivedMessage.payload.control_transmitter.data);
                         }
                     }
                     // else Serial.printf("Primer dato ignorado por inconsistencia.\n");
@@ -81,15 +94,20 @@ void OnDataReceived(const uint8_t *mac, const uint8_t *incomingData, int len) {
                     switch (receivedMessage.payload.trunk_protector.player_color) {
                         case 0:
                             Serial.printf("%u\n", RED_PUNCH);
+                            turnOnPlayerLed(RED_PUNCH);
                             break;
                         case 1:
                             Serial.printf("%u\n", BLUE_PUNCH);
+                            turnOnPlayerLed(BLUE_PUNCH);
                             break;
                         default:
                             break;                    
                     }   
                 }
-                else Serial.printf("Contacto (Peto %u Color: %u)!, Fuerza: %.2f\n", receivedMessage.base.deviceID, receivedMessage.payload.trunk_protector.player_color, receivedMessage.payload.trunk_protector.pressure_value);
+                else Serial.printf("Contacto! (Peto %u Color: %u), Fuerza: %.2f\n", receivedMessage.base.deviceID, receivedMessage.payload.trunk_protector.player_color, receivedMessage.payload.trunk_protector.pressure_value);
+                
+                uint8_t data = receivedMessage.payload.trunk_protector.player_color ? RED_PUNCH : BLUE_PUNCH;
+                turnOnPlayerLed(data);
             }
             break;
         
@@ -117,6 +135,8 @@ void OnDataReceived(const uint8_t *mac, const uint8_t *incomingData, int len) {
                     Serial.printf("(Control %u) - Complemento de puntos, Accion: %u\n", receivedMessage.base.deviceID, data);
                 }
                 else Serial.printf("%u\n", data);
+
+                turnOnPlayerLed(data);
             }
             break;
 
@@ -162,6 +182,8 @@ void OnDataReceived(const uint8_t *mac, const uint8_t *incomingData, int len) {
                                 Serial.printf("¡Confirmacion! Acción: %u, Tiempo de diferencia: %ums\n", receivedMessage.payload.control_transmitter.data, timeDiff);
                             }
                             else Serial.printf("%u\n", receivedMessage.payload.control_transmitter.data);
+
+                            turnOnPlayerLed(receivedMessage.payload.control_transmitter.data);
                         }
                     }
                     if (waitingForControllerConfirmation_red && 
@@ -173,6 +195,8 @@ void OnDataReceived(const uint8_t *mac, const uint8_t *incomingData, int len) {
                                 Serial.printf("¡Confirmacion! Acción: %u, Tiempo de diferencia: %ums\n", receivedMessage.payload.control_transmitter.data, timeDiff);
                             }
                             else Serial.printf("%u\n", receivedMessage.payload.control_transmitter.data);
+
+                            turnOnPlayerLed(receivedMessage.payload.control_transmitter.data);
                         }
                     }
                 }
@@ -189,6 +213,12 @@ void setup() {
     Serial.println("\nInicializando Receptor...");
     Serial.print("MAC Receptor: ");
     Serial.println(WiFi.macAddress());
+
+    // Declaramos los pines de salida y los apagamos
+    pinMode(pinLedBlue, OUTPUT);
+    pinMode(pinLedRed, OUTPUT);
+    digitalWrite(pinLedBlue, LOW);
+    digitalWrite(pinLedRed, LOW);
     
     dipswitch_config();
     dipValue = read_dipswitch();
@@ -248,6 +278,7 @@ void setup() {
 }
 
 void loop() {
+    turnOffPlayerLed();
     switch (RECEIVING_DEVICE_MODE) {
         case TWO_CONTROL:
             // Si pasó el tiempo máximo y no llegó el segundo mensaje, reiniciar
@@ -261,12 +292,12 @@ void loop() {
         case TRUNK_PROTECTOR_WITH_CONTROL_CONFIRMATION:
             // Si pasó el tiempo máximo y no llegó el segundo mensaje, reiniciar
             if (waitingForControllerConfirmation_blue && (millis() - firstMessageTime > MAX_WAIT_TIME)) {
-                if (DEBUG_MODE) Serial.println("Tiempo agotado. Ignorando primer dato.");
+                if (DEBUG_MODE) Serial.println("Tiempo agotado (azul). Ignorando primer dato.");
 
                 waitingForControllerConfirmation_blue = false;
             }
             if (waitingForControllerConfirmation_red && (millis() - firstMessageTime > MAX_WAIT_TIME)) {
-                if (DEBUG_MODE) Serial.println("Tiempo agotado. Ignorando primer dato.");
+                if (DEBUG_MODE) Serial.println("Tiempo agotado (rojo). Ignorando primer dato.");
 
                 waitingForControllerConfirmation_red = false;
             }
@@ -287,5 +318,26 @@ void espnow_init() {
     
     if (DEBUG_MODE) {
         Serial.println("ESP-NOW inicializado correctamente");
+    }
+}
+
+void turnOnPlayerLed(uint8_t data) {
+    if (data <= 5) {
+        ledBlueTurnOnTime = millis();
+        digitalWrite(pinLedBlue, HIGH);
+    }
+    else {
+        ledRedTurnOnTime = millis();
+        digitalWrite(pinLedRed, HIGH);
+    }
+}
+
+void turnOffPlayerLed() {
+    if (millis() - ledBlueTurnOnTime > MAX_WAIT_TIME_LED) {
+        digitalWrite(pinLedBlue, LOW);
+    }
+
+    if (millis() - ledRedTurnOnTime > MAX_WAIT_TIME_LED) {
+        digitalWrite(pinLedRed, LOW);
     }
 }

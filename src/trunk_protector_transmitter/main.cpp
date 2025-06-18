@@ -5,6 +5,10 @@
 #include "const.h"
 #include "DataStructure.h"
 #include "pressure_sensor.h"
+#include "dip_switch.h"
+
+// Variable que almacenará el valor del DIP switch
+uint8_t dipValue = 0;
 
 // Estructura de datos para enviar por ESPNOW
 DeviceMessage message;
@@ -67,6 +71,17 @@ void setup() {
 
     Serial.begin(115200);
     Serial.println("Inicializado transmisor del peto...");
+
+    dipswitch_config();
+    dipValue = read_dipswitch();
+
+    Serial.printf("Valor leído del DIP switch: 0x%02X\n", dipValue);
+
+    if (dipValue != 0) {
+        // Configurar el modo de operacion basado en DIP switch
+        PRESSURE_THRESHOLD = dipValue * 50;
+        Serial.printf("Valor threshold: %u\n", PRESSURE_THRESHOLD);
+    }
 
     espnow_init();
 }
